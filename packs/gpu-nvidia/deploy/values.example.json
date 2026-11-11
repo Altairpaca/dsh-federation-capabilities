@@ -1,0 +1,9 @@
+{
+  "python": "/opt/fedcap/venv/bin/python",
+  "jobDir": "/opt/fedcap/jobs",
+  "deviceAllowlist": "0,2",
+  "scriptAllowlist": [
+    "/opt/fedcap/scripts/train.py",
+    "/opt/fedcap/scripts/evaluate.py"
+  ]
+}

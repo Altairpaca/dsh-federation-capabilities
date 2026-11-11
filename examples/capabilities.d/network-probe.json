@@ -1,0 +1,64 @@
+[
+  {
+    "id": "net.egress",
+    "title": "Report outbound egress identity",
+    "description": "Query public IP-echo endpoints and report the public egress address, round-trip latency and DNS resolution status for the direct path and, when a proxy is configured, the proxied path.",
+    "tags": ["network", "diagnostics", "egress"],
+    "idempotent": true,
+    "timeoutMs": 30000,
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "type": "object"
+    },
+    "invoke": {
+      "kind": "shell",
+      "command": "python3 /opt/fedcap/packs/network-probe/bin/net_egress.py",
+      "env": {
+        "NETWORK_PROBE_PROXY": "",
+        "NETWORK_PROBE_MAX_BYTES": "262144"
+      }
+    }
+  },
+  {
+    "id": "web.fetch",
+    "title": "Fetch a public URL",
+    "description": "Fetch one public http(s) URL and return status, content type, bounded text content and timing.",
+    "tags": ["network", "web", "fetch"],
+    "idempotent": true,
+    "timeoutMs": 60000,
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096,
+          "description": "Absolute http(s) URL on port 80 or 443 pointing at a public host."
+        },
+        "maxBytes": {
+          "type": "integer",
+          "minimum": 512,
+          "maximum": 1048576,
+          "description": "Optional per-call output cap."
+        }
+      },
+      "required": ["url"],
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "type": "object"
+    },
+    "invoke": {
+      "kind": "shell",
+      "command": "python3 /opt/fedcap/packs/network-probe/bin/web_fetch.py",
+      "env": {
+        "NETWORK_PROBE_PROXY": "",
+        "NETWORK_PROBE_MAX_BYTES": "262144"
+      }
+    }
+  }
+]

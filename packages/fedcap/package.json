@@ -1,0 +1,17 @@
+{
+  "name": "fedcap",
+  "version": "0.1.0",
+  "description": "Install host-capability packs into a DSH Federation mesh node configuration.",
+  "type": "module",
+  "bin": {
+    "fedcap": "./bin/fedcap.js"
+  },
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT",
+  "author": "Altair Zhenzhuo Li"
+}

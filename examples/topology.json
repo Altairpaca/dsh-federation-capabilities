@@ -1,0 +1,28 @@
+{
+  "v": 1,
+  "revision": 1,
+  "updatedAt": 1735689600000,
+  "updatedBy": "example-hub",
+  "defaults": {
+    "transport": "http"
+  },
+  "router": {
+    "id": "example-hub",
+    "epoch": 0,
+    "handoff": {
+      "state": "idle"
+    }
+  },
+  "workers": [
+    {
+      "id": "example-worker",
+      "title": "Example worker (HTTP transport)",
+      "kind": "worker",
+      "enabled": true,
+      "transport": "http",
+      "httpUrl": "http://127.0.0.1:8787",
+      "httpTokenEnv": "MESH_NODE_TOKEN",
+      "capabilities": ["net.egress", "web.fetch"]
+    }
+  ]
+}

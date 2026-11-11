@@ -1,0 +1,99 @@
+{
+  "v": 1,
+  "id": "network-probe",
+  "title": "Outbound network probe and bounded fetch",
+  "version": "0.1.0",
+  "description": "Probe outbound connectivity and fetch bounded text from public HTTP(S) URLs. net.egress reports the direct and (when configured) proxy egress identity, latency and DNS reachability without exposing local interface addresses; web.fetch refuses private, loopback and reserved destinations and validates every redirect hop.",
+  "license": "MIT",
+  "requires": {
+    "python": ">=3.8"
+  },
+  "config": {
+    "proxy": {
+      "default": "",
+      "description": "Optional HTTP(S) proxy URL used by both executors, for example http://127.0.0.1:3128. Empty string means direct connections. Ambient HTTP_PROXY/HTTPS_PROXY variables are intentionally ignored: only this value is used."
+    },
+    "maxBytes": {
+      "default": 262144,
+      "description": "Upper bound in bytes for the JSON written to stdout. web.fetch shrinks content to fit and flags truncation; values are clamped to 1 MiB."
+    }
+  },
+  "capabilities": [
+    {
+      "id": "net.egress",
+      "title": "Report outbound egress identity",
+      "description": "Query public IP-echo endpoints and report the public egress address, round-trip latency and DNS resolution status for the direct path and, when a proxy is configured, the proxied path. Local interface addresses, the proxy URL and resolved DNS addresses are never reported; a non-global address echoed by an upstream is withheld.",
+      "tags": ["network", "diagnostics", "egress"],
+      "idempotent": true,
+      "timeoutMs": 30000,
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object"
+      },
+      "invoke": {
+        "kind": "shell",
+        "command": "{{python}} {{packDir}}/bin/net_egress.py",
+        "env": {
+          "NETWORK_PROBE_PROXY": "{{config.proxy}}",
+          "NETWORK_PROBE_MAX_BYTES": "{{config.maxBytes}}"
+        }
+      }
+    },
+    {
+      "id": "web.fetch",
+      "title": "Fetch a public URL",
+      "description": "Fetch one public http(s) URL and return status, content type, bounded text content and timing. Only ports 80/443 are allowed, URL userinfo is refused, private/loopback/link-local/CGNAT/reserved destinations are refused (including each redirect hop), and the response is capped by maxBytes. Binary bodies are reported without content bytes.",
+      "tags": ["network", "web", "fetch"],
+      "idempotent": true,
+      "timeoutMs": 60000,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096,
+            "description": "Absolute http(s) URL on port 80 or 443 pointing at a public host."
+          },
+          "maxBytes": {
+            "type": "integer",
+            "minimum": 512,
+            "maximum": 1048576,
+            "description": "Optional per-call output cap; the effective cap is the smaller of this value and the pack maxBytes config."
+          }
+        },
+        "required": ["url"],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object"
+      },
+      "invoke": {
+        "kind": "shell",
+        "command": "{{python}} {{packDir}}/bin/web_fetch.py",
+        "env": {
+          "NETWORK_PROBE_PROXY": "{{config.proxy}}",
+          "NETWORK_PROBE_MAX_BYTES": "{{config.maxBytes}}"
+        }
+      }
+    }
+  ],
+  "checks": [
+    {
+      "description": "python syntax of the executors",
+      "command": "{{python}} -m py_compile {{packDir}}/bin/net_egress.py {{packDir}}/bin/web_fetch.py"
+    },
+    {
+      "description": "offline self-test: net.egress (address classification and output fitting)",
+      "command": "{{python}} {{packDir}}/bin/net_egress.py --self-test"
+    },
+    {
+      "description": "offline self-test: web.fetch (SSRF guard, parsing and output fitting)",
+      "command": "{{python}} {{packDir}}/bin/web_fetch.py --self-test"
+    }
+  ]
+}

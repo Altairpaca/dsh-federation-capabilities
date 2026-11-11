@@ -1,0 +1,112 @@
+{
+  "v": 1,
+  "id": "firecrawl",
+  "title": "Firecrawl scrape and search",
+  "version": "0.1.0",
+  "description": "Scrape a URL to clean markdown and run web searches through a self-hosted Firecrawl instance. Ships an optional bearer-token reverse-proxy gateway for operators who must expose the otherwise unauthenticated Firecrawl API beyond loopback.",
+  "license": "MIT",
+  "requires": {
+    "node": ">=20",
+    "python": ">=3.8"
+  },
+  "config": {
+    "baseUrl": {
+      "default": "http://127.0.0.1:3002",
+      "description": "Firecrawl API base URL without a trailing slash. Point this at the token gateway URL when using the deploy/ template."
+    },
+    "tokenFile": {
+      "default": "",
+      "description": "Path to a file holding the bearer token (0600). Empty string sends no Authorization header (loopback-only deployments)."
+    },
+    "maxMarkdownBytes": {
+      "default": 65536,
+      "description": "Upper bound in UTF-8 bytes for the markdown returned by firecrawl.scrape. Larger documents are truncated and flagged."
+    }
+  },
+  "capabilities": [
+    {
+      "id": "firecrawl.scrape",
+      "title": "Scrape a URL to markdown",
+      "description": "Fetch one public URL through the configured Firecrawl instance and return clean markdown (optionally main content only). The response is bounded by maxMarkdownBytes.",
+      "tags": ["web", "scrape", "firecrawl", "markdown"],
+      "idempotent": true,
+      "timeoutMs": 120000,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Absolute http(s) URL to scrape."
+          },
+          "onlyMainContent": {
+            "type": "boolean",
+            "default": true,
+            "description": "Ask Firecrawl to drop navigation, footers and other boilerplate."
+          }
+        },
+        "required": ["url"],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object"
+      },
+      "invoke": {
+        "kind": "shell",
+        "command": "{{python}} {{packDir}}/bin/firecrawl_scrape.py",
+        "env": {
+          "FIRECRAWL_BASE_URL": "{{config.baseUrl}}",
+          "FIRECRAWL_TOKEN_FILE": "{{config.tokenFile}}",
+          "FIRECRAWL_MAX_MARKDOWN_BYTES": "{{config.maxMarkdownBytes}}"
+        }
+      }
+    },
+    {
+      "id": "firecrawl.search",
+      "title": "Search the web through Firecrawl",
+      "description": "Run a web search through the configured Firecrawl instance and return titles, URLs and descriptions. Upstream failures are reported as ok:false JSON instead of crashing the shell capability.",
+      "tags": ["web", "search", "firecrawl"],
+      "idempotent": true,
+      "timeoutMs": 90000,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Search query."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10,
+            "default": 5,
+            "description": "Maximum number of results (1-10)."
+          }
+        },
+        "required": ["query"],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object"
+      },
+      "invoke": {
+        "kind": "shell",
+        "command": "{{python}} {{packDir}}/bin/firecrawl_search.py",
+        "env": {
+          "FIRECRAWL_BASE_URL": "{{config.baseUrl}}",
+          "FIRECRAWL_TOKEN_FILE": "{{config.tokenFile}}"
+        }
+      }
+    }
+  ],
+  "checks": [
+    {
+      "description": "python syntax of the scrape/search executors and the gateway template",
+      "command": "{{python}} -m py_compile {{packDir}}/bin/firecrawl_scrape.py {{packDir}}/bin/firecrawl_search.py {{packDir}}/deploy/gateway.py"
+    }
+  ],
+  "deploy": {
+    "docs": "deploy/README.md"
+  }
+}

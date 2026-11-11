@@ -1,0 +1,19 @@
+{
+  "name": "dsh-federation-capabilities",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Pluggable host-capability packs for DSH Federation: Firecrawl, SearXNG, GPU and network probes, installed as mesh capability descriptors.",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test packages/fedcap/test",
+    "sanitize": "node scripts/check-sanitize.mjs",
+    "sanitize:history": "node scripts/check-sanitize.mjs --history",
+    "check:packs": "node scripts/check-packs.mjs",
+    "ci": "npm run test && npm run sanitize && npm run check:packs"
+  },
+  "license": "MIT",
+  "author": "Altair Zhenzhuo Li"
+}

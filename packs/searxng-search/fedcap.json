@@ -1,0 +1,77 @@
+{
+  "v": 1,
+  "id": "searxng-search",
+  "title": "SearXNG web search",
+  "version": "0.1.0",
+  "description": "Query a self-hosted SearXNG meta-search instance and return normalized web results (title, url, content, engine). Useful as a lightweight, self-hosted alternative to commercial search APIs and as the search backend next to a local Firecrawl deployment.",
+  "license": "MIT",
+  "requires": {
+    "node": ">=20",
+    "python": ">=3.8"
+  },
+  "config": {
+    "baseUrl": {
+      "default": "http://127.0.0.1:8080",
+      "description": "SearXNG base URL without a trailing slash. The instance must allow the JSON output format (search.formats includes json)."
+    },
+    "engines": {
+      "default": "",
+      "description": "Comma-separated SearXNG engine names (for example brave,bing,duckduckgo). Empty string uses the instance default."
+    },
+    "language": {
+      "default": "",
+      "description": "Default SearXNG language code (for example en or zh-CN). Empty string uses the instance default; a per-call language argument overrides it."
+    }
+  },
+  "capabilities": [
+    {
+      "id": "web.search",
+      "title": "Web search via SearXNG",
+      "description": "Run a web search through a self-hosted SearXNG instance and return normalized results. Failures are reported as ok:false JSON instead of crashing the shell capability.",
+      "tags": ["web", "search", "searxng"],
+      "idempotent": true,
+      "timeoutMs": 45000,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Search query."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10,
+            "default": 5,
+            "description": "Maximum number of results to return (1-10)."
+          },
+          "language": {
+            "type": "string",
+            "description": "Optional SearXNG language code; overrides the pack default."
+          }
+        },
+        "required": ["query"],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object"
+      },
+      "invoke": {
+        "kind": "shell",
+        "command": "{{python}} {{packDir}}/bin/searxng_search.py",
+        "env": {
+          "SEARXNG_BASE_URL": "{{config.baseUrl}}",
+          "SEARXNG_ENGINES": "{{config.engines}}",
+          "SEARXNG_LANGUAGE": "{{config.language}}"
+        }
+      }
+    }
+  ],
+  "checks": [
+    {
+      "description": "python syntax of the search executor",
+      "command": "{{python}} -m py_compile {{packDir}}/bin/searxng_search.py"
+    }
+  ]
+}

@@ -1,0 +1,31 @@
+# Hub-to-worker nodes fragment (dsh-federation profile patch)
+
+# This is a fragment for the `config.nodes[]` list of the `dsh-federation`
+# plugin on the hub. Copy it into your profile patch and replace the example
+# values. Real host names, addresses, tokens and home directories stay in the
+# operator's profile, never in this repository.
+- id: dsh-federation
+  name: dsh-federation
+  config:
+    nodeId: example-hub
+    title: Example hub
+    role: hub
+    stateDir: /opt/fedcap/hub-state
+    nodes:
+      # Worker that runs network-probe and is reached over the HTTP transport.
+      # The bearer token comes from the hub process environment, never from git.
+      - id: example-worker
+        title: Example worker (HTTP transport)
+        transport: http
+        httpUrl: http://127.0.0.1:8787
+        httpTokenEnv: MESH_NODE_TOKEN
+        capabilities: [net.egress, web.fetch]
+
+      # Alternative: a worker reached over the hub's existing SSH trust.
+      # - id: example-ssh-worker
+      #   title: Example worker (SSH transport)
+      #   transport: ssh
+      #   sshHost: worker.example.invalid
+      #   sshUser: fedcap
+      #   nodeBin: /opt/fedcap/bin/mesh-node.js
+      #   capabilities: [net.egress, web.fetch]

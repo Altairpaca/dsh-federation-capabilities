@@ -1,0 +1,9 @@
+{
+  "nodeId": "example-worker",
+  "title": "Example worker with network-probe",
+  "kind": "shell",
+  "protocol": "mesh/1",
+  "transport": "http",
+  "stateDir": "/opt/fedcap/state/worker",
+  "capabilitiesFile": ["capabilities.d/network-probe.json"]
+}

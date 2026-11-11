@@ -1,0 +1,323 @@
+{
+  "v": 1,
+  "id": "gpu-nvidia",
+  "title": "NVIDIA GPU worker",
+  "version": "0.1.0",
+  "description": "Turn an NVIDIA GPU host into mesh capabilities: GPU inventory, a bounded CUDA matmul smoke probe, a whitelisted short-task executor and detached background jobs. Scripts are restricted to an operator-supplied allowlist of absolute paths; arbitrary shell strings are never executed. Every GPU use is pinned with CUDA_VISIBLE_DEVICES, guarded by a per-device advisory lock and a free-VRAM preflight.",
+  "license": "MIT",
+  "requires": {
+    "node": ">=20",
+    "python": ">=3.8"
+  },
+  "config": {
+    "python": {
+      "default": "python3",
+      "description": "Python interpreter used by every executor and by allowlisted user scripts. Point it at a venv that has torch to enable gpu.smoke; otherwise gpu.smoke returns ok:false JSON."
+    },
+    "jobDir": {
+      "default": "~/.fedcap/jobs",
+      "description": "Writable directory for job workspaces, logs, locks and results. Put it on a data disk, not on a small root filesystem."
+    },
+    "deviceAllowlist": {
+      "default": "0,2",
+      "description": "Comma-separated GPU indices this pack may use. The default 0,2 avoids the two cards typically left free on a four-GPU shared host; review nvidia-smi before changing it."
+    },
+    "scriptAllowlist": {
+      "default": [],
+      "description": "Absolute paths of operator-approved scripts that gpu.exec and gpu.job.submit may run. Empty disables script execution. fedcap renders this value into FEDCAP_GPU_SCRIPT_ALLOWLIST as comma-separated or JSON-array text; the executors accept both."
+    }
+  },
+  "capabilities": [
+    {
+      "id": "gpu.info",
+      "title": "NVIDIA GPU inventory",
+      "description": "List the host's NVIDIA GPUs with UUID, memory, utilization, temperature, driver version and running compute processes, plus the configured device allowlist and per-GPU allowed flags. Read-only.",
+      "tags": ["gpu", "nvidia", "host", "inventory"],
+      "idempotent": true,
+      "timeoutMs": 20000,
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object"
+      },
+      "invoke": {
+        "kind": "shell",
+        "command": "{{config.python}} {{packDir}}/bin/gpu_info.py",
+        "env": {
+          "FEDCAP_GPU_DEVICE_ALLOWLIST": "{{config.deviceAllowlist}}"
+        }
+      }
+    },
+    {
+      "id": "gpu.smoke",
+      "title": "GPU compute smoke test",
+      "description": "Run one bounded cuBLAS square matmul on the allowlisted GPU with the most free VRAM and report device, free VRAM, latency and GFLOPS. Picks 4096x4096 float32 by default, never loads a model, and returns ok:false JSON when torch is unavailable in the configured python.",
+      "tags": ["gpu", "cuda", "probe", "compute"],
+      "idempotent": true,
+      "timeoutMs": 180000,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "size": {
+            "type": "integer",
+            "minimum": 256,
+            "maximum": 8192,
+            "default": 4096,
+            "description": "Square matrix edge length."
+          },
+          "dtype": {
+            "type": "string",
+            "enum": ["float32", "float16"],
+            "default": "float32",
+            "description": "Matmul operand dtype."
+          },
+          "device": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 63,
+            "description": "Optional GPU index from the device allowlist; defaults to the allowlisted GPU with the most free VRAM."
+          }
+        },
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object"
+      },
+      "invoke": {
+        "kind": "shell",
+        "command": "{{config.python}} {{packDir}}/bin/gpu_smoke.py",
+        "env": {
+          "FEDCAP_GPU_DEVICE_ALLOWLIST": "{{config.deviceAllowlist}}"
+        }
+      }
+    },
+    {
+      "id": "gpu.exec",
+      "title": "Run one whitelisted GPU action",
+      "description": "Run exactly one whitelisted action: a fixed nvidia-smi query (read-only) or an allowlisted python script. The script receives args.params as JSON on stdin, runs with the configured python and CUDA_VISIBLE_DEVICES pinned, holds a per-device advisory lock and is refused when free VRAM is below minFreeMiB. Arbitrary shell strings, inline code and URLs are not accepted; captured output is capped at 64 KiB.",
+      "tags": ["gpu", "compute", "exec"],
+      "idempotent": false,
+      "timeoutMs": 600000,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": ["nvidia_smi_query", "python_script"],
+            "description": "nvidia_smi_query is read-only; python_script runs one allowlisted script."
+          },
+          "query": {
+            "type": "string",
+            "enum": ["summary", "list", "processes"],
+            "default": "summary",
+            "description": "Fixed nvidia-smi query set; only used by the nvidia_smi_query action."
+          },
+          "script": {
+            "type": "string",
+            "description": "Absolute path of an allowlisted script; required by the python_script action."
+          },
+          "params": {
+            "type": "object",
+            "description": "JSON object passed to the script on stdin (python_script action only)."
+          },
+          "args": {
+            "type": "object",
+            "description": "Alias for params; the same JSON object is passed to the script on stdin."
+          },
+          "device": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 63,
+            "description": "Optional GPU index from the device allowlist (python_script action only)."
+          },
+          "timeoutSec": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 600,
+            "default": 120,
+            "description": "Hard execution timeout for the action."
+          },
+          "minFreeMiB": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 65536,
+            "default": 1024,
+            "description": "Minimum free VRAM required before the script starts."
+          }
+        },
+        "required": ["action"],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object"
+      },
+      "invoke": {
+        "kind": "shell",
+        "command": "{{config.python}} {{packDir}}/bin/gpu_exec.py",
+        "env": {
+          "FEDCAP_GPU_DEVICE_ALLOWLIST": "{{config.deviceAllowlist}}",
+          "FEDCAP_GPU_JOB_DIR": "{{config.jobDir}}",
+          "FEDCAP_GPU_SCRIPT_ALLOWLIST": "{{config.scriptAllowlist}}"
+        }
+      }
+    },
+    {
+      "id": "gpu.job.submit",
+      "title": "Submit a background GPU job",
+      "description": "Start one allowlisted python script as a detached background job under jobDir and return a jobId immediately. The script receives args.params on stdin, runs with CUDA_VISIBLE_DEVICES pinned, holds the per-device advisory lock for its whole lifetime and is killed as a process group when timeoutSec expires. Resubmitting the same operationKey returns the original job instead of starting a duplicate.",
+      "tags": ["gpu", "job", "async"],
+      "idempotent": false,
+      "timeoutMs": 30000,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": ["python_script"],
+            "default": "python_script",
+            "description": "Only allowlisted python scripts can be submitted as jobs."
+          },
+          "script": {
+            "type": "string",
+            "description": "Absolute path of an allowlisted script."
+          },
+          "params": {
+            "type": "object",
+            "description": "JSON object passed to the script on stdin."
+          },
+          "args": {
+            "type": "object",
+            "description": "Alias for params; the same JSON object is passed to the script on stdin."
+          },
+          "device": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 63,
+            "description": "Optional GPU index from the device allowlist."
+          },
+          "timeoutSec": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 3600,
+            "default": 600,
+            "description": "Hard job timeout; the job process group is terminated when it expires."
+          },
+          "minFreeMiB": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 65536,
+            "default": 1024,
+            "description": "Minimum free VRAM required before submission."
+          },
+          "operationKey": {
+            "type": "string",
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9._:-]+$",
+            "description": "Optional idempotency key; reuse it to recover the jobId after a lost response."
+          }
+        },
+        "required": ["script"],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object"
+      },
+      "invoke": {
+        "kind": "shell",
+        "command": "{{config.python}} {{packDir}}/bin/gpu_job_submit.py",
+        "env": {
+          "FEDCAP_GPU_DEVICE_ALLOWLIST": "{{config.deviceAllowlist}}",
+          "FEDCAP_GPU_JOB_DIR": "{{config.jobDir}}",
+          "FEDCAP_GPU_SCRIPT_ALLOWLIST": "{{config.scriptAllowlist}}"
+        }
+      }
+    },
+    {
+      "id": "gpu.job.status",
+      "title": "Poll a background GPU job",
+      "description": "Return the state (queued, running, succeeded, failed, timeout or lost), exit code, device, script and timing metadata of one background job. Read-only.",
+      "tags": ["gpu", "job", "status"],
+      "idempotent": true,
+      "timeoutMs": 10000,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "jobId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$",
+            "description": "Job id returned by gpu.job.submit."
+          }
+        },
+        "required": ["jobId"],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object"
+      },
+      "invoke": {
+        "kind": "shell",
+        "command": "{{config.python}} {{packDir}}/bin/gpu_job_status.py",
+        "env": {
+          "FEDCAP_GPU_JOB_DIR": "{{config.jobDir}}"
+        }
+      }
+    },
+    {
+      "id": "gpu.job.result",
+      "title": "Read background job output",
+      "description": "Return the current status plus the tail of a background job's captured stdout and stderr. tailBytes bounds each stream; both are capped so one response stays below 64 KiB, with truncated flags when older bytes were dropped.",
+      "tags": ["gpu", "job", "result", "logs"],
+      "idempotent": true,
+      "timeoutMs": 20000,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "jobId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$",
+            "description": "Job id returned by gpu.job.submit."
+          },
+          "tailBytes": {
+            "type": "integer",
+            "minimum": 1024,
+            "maximum": 65536,
+            "default": 32768,
+            "description": "Maximum bytes returned per stream."
+          }
+        },
+        "required": ["jobId"],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object"
+      },
+      "invoke": {
+        "kind": "shell",
+        "command": "{{config.python}} {{packDir}}/bin/gpu_job_result.py",
+        "env": {
+          "FEDCAP_GPU_JOB_DIR": "{{config.jobDir}}"
+        }
+      }
+    }
+  ],
+  "checks": [
+    {
+      "description": "python syntax of every executor",
+      "command": "{{python}} -m py_compile {{packDir}}/bin/_common.py {{packDir}}/bin/_job_runner.py {{packDir}}/bin/gpu_info.py {{packDir}}/bin/gpu_smoke.py {{packDir}}/bin/gpu_exec.py {{packDir}}/bin/gpu_job_submit.py {{packDir}}/bin/gpu_job_status.py {{packDir}}/bin/gpu_job_result.py"
+    },
+    {
+      "description": "executors import cleanly against the shared helper",
+      "command": "{{python}} -c \"import sys; sys.path.insert(0, '{{packDir}}/bin'); import _common, _job_runner, gpu_info, gpu_smoke, gpu_exec, gpu_job_submit, gpu_job_status, gpu_job_result; print('ok')\""
+    }
+  ],
+  "deploy": {
+    "docs": "deploy/README.md"
+  }
+}
