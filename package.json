@@ -1,4 +1,4 @@
-{
+﻿{
   "name": "dsh-federation-capabilities",
   "version": "0.1.0",
   "private": true,
@@ -8,7 +8,7 @@
     "node": ">=20"
   },
   "scripts": {
-    "test": "node --test packages/fedcap/test",
+    "test": "node --test packages/fedcap/test/fedcap.test.js",
     "sanitize": "node scripts/check-sanitize.mjs",
     "sanitize:history": "node scripts/check-sanitize.mjs --history",
     "check:packs": "node scripts/check-packs.mjs",
